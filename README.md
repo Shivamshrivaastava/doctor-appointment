@@ -4,6 +4,9 @@ A comprehensive Node.js backend API for managing doctor appointments with MongoD
 
 ## Features
 
+### Backend - https://doctor-appointment-s3yb.onrender.com/api
+##Frontend - https://get-doctor-appointment.netlify.app/
+
 ### Authentication & Authorization
 - User registration and login (JWT-based)
 - Role-based access control (Patient, Doctor, Admin)
