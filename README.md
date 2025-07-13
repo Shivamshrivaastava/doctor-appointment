@@ -224,7 +224,7 @@ The system automatically creates collections and indexes when you start adding d
 
 1. Set production environment variables
 2. Use MongoDB Atlas for database
-3. Deploy to platforms like Heroku, AWS, or DigitalOcean
+3. Deploy to platforms like Heroku, AWS, or DigitalOcean or render
 4. Set up proper logging and monitoring
 
 ## License
