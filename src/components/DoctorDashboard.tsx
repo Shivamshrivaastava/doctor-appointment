@@ -19,8 +19,9 @@ const DoctorDashboard: React.FC = () => {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [showActionModal, setShowActionModal] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState(null);
+  const [actionType, setActionType] = useState<'confirm' | 'complete'>('complete');
 
   useEffect(() => {
     loadAppointments();
@@ -33,63 +34,53 @@ const DoctorDashboard: React.FC = () => {
       setAppointments(response.appointments || []);
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: "Failed to load appointments",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to load appointments',
+        variant: 'destructive',
       });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleStatusUpdate = async (appointmentId: string, status: string) => {
-    try {
-      await appointmentAPI.updateStatus(appointmentId, status);
-      await loadAppointments();
-      toast({
-        title: "Success",
-        description: `Appointment ${status} successfully`,
-      });
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleCompleteAppointment = (appointment: any) => {
+  // ✅ Handle confirm or complete inside modal
+  const handleAction = (appointment: any, type: 'confirm' | 'complete') => {
     setSelectedAppointment(appointment);
-    setShowCompleteModal(true);
+    setActionType(type);
+    setShowActionModal(true);
   };
 
-  //Close a single future appointment manually
+  // ✅ Close future appointment
   const handleCloseAppointment = async (appointmentId: string) => {
-    if (!window.confirm("Are you sure you want to close this appointment?")) return;
+    if (!window.confirm('Are you sure you want to close this appointment?')) return;
     try {
-      await appointmentAPI.cancel(appointmentId, "Doctor closed future appointment");
+      await appointmentAPI.cancel(appointmentId, 'Doctor closed future appointment');
       await loadAppointments();
       toast({
-        title: "Closed",
-        description: "Appointment closed successfully",
+        title: 'Closed',
+        description: 'Appointment closed successfully',
       });
     } catch (error: any) {
       toast({
-        title: "Error",
+        title: 'Error',
         description: error.message,
-        variant: "destructive",
+        variant: 'destructive',
       });
     }
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'confirmed': return 'bg-success text-white';
-      case 'pending': return 'bg-warning text-white';
-      case 'completed': return 'bg-primary text-white';
-      case 'cancelled': return 'bg-destructive text-white';
-      default: return 'bg-muted text-muted-foreground';
+      case 'confirmed':
+        return 'bg-success text-white';
+      case 'pending':
+        return 'bg-warning text-white';
+      case 'completed':
+        return 'bg-primary text-white';
+      case 'cancelled':
+        return 'bg-destructive text-white';
+      default:
+        return 'bg-muted text-muted-foreground';
     }
   };
 
@@ -148,12 +139,12 @@ const DoctorDashboard: React.FC = () => {
             <TabsTrigger value="cancelled">Cancelled</TabsTrigger>
           </TabsList>
 
-          {["all", "pending", "confirmed", "completed", "cancelled"].map((tab) => (
+          {['all', 'pending', 'confirmed', 'completed', 'cancelled'].map((tab) => (
             <TabsContent value={tab} className="mt-6" key={tab}>
               <AppointmentsList
-                appointments={filterAppointments(tab === "all" ? undefined : tab)}
-                onStatusUpdate={handleStatusUpdate}
-                onComplete={handleCompleteAppointment}
+                appointments={filterAppointments(tab === 'all' ? undefined : tab)}
+                onConfirm={(apt) => handleAction(apt, 'confirm')}
+                onComplete={(apt) => handleAction(apt, 'complete')}
                 onClose={handleCloseAppointment}
                 getStatusColor={getStatusColor}
               />
@@ -170,15 +161,16 @@ const DoctorDashboard: React.FC = () => {
         />
       )}
 
-      {showCompleteModal && selectedAppointment && (
+      {showActionModal && selectedAppointment && (
         <CompleteAppointmentModal
-          isOpen={showCompleteModal}
+          isOpen={showActionModal}
           onClose={() => {
-            setShowCompleteModal(false);
+            setShowActionModal(false);
             setSelectedAppointment(null);
           }}
           appointment={selectedAppointment}
           onSuccess={loadAppointments}
+          actionType={actionType} // 👈 add this prop
         />
       )}
     </div>
@@ -187,11 +179,11 @@ const DoctorDashboard: React.FC = () => {
 
 const AppointmentsList: React.FC<{
   appointments: any[];
-  onStatusUpdate: (id: string, status: string) => void;
+  onConfirm: (appointment: any) => void;
   onComplete: (appointment: any) => void;
   onClose: (id: string) => void;
   getStatusColor: (status: string) => string;
-}> = ({ appointments, onStatusUpdate, onComplete, onClose, getStatusColor }) => {
+}> = ({ appointments, onConfirm, onComplete, onClose, getStatusColor }) => {
   if (appointments.length === 0) {
     return (
       <Card>
@@ -244,23 +236,22 @@ const AppointmentsList: React.FC<{
                 <div className="ml-6 flex flex-col gap-2">
                   {appointment.status === 'pending' && (
                     <>
-                      <Button size="sm" onClick={() => onStatusUpdate(appointment._id, 'confirmed')}>
+                      <Button size="sm" onClick={() => onConfirm(appointment)}>
                         <Check className="h-4 w-4 mr-1" /> Confirm
                       </Button>
-                      <Button variant="destructive" size="sm" onClick={() => onStatusUpdate(appointment._id, 'cancelled')}>
-                        <X className="h-4 w-4 mr-1" /> Cancel
+                      <Button variant="destructive" size="sm" onClick={() => onClose(appointment._id)}>
+                        <X className="h-4 w-4 mr-1" /> Close
                       </Button>
                     </>
                   )}
 
-                  {/* ✅ UPDATED: Close button now visible for pending or confirmed future appointments */}
                   {(appointment.status === 'confirmed' || appointment.status === 'pending') && isFuture && (
                     <Button variant="destructive" size="sm" onClick={() => onClose(appointment._id)}>
                       <X className="h-4 w-4 mr-1" /> Close
                     </Button>
                   )}
 
-                  {appointment.status === 'confirmed' && !isFuture && (
+                  {appointment.status === 'confirmed' && (
                     <Button variant="outline" size="sm" onClick={() => onComplete(appointment)}>
                       Complete
                     </Button>
