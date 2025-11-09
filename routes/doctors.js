@@ -6,7 +6,7 @@ const { auth, authorize } = require('../middleware/auth');
 
 const router = express.Router();
 
-
+// Create doctor profile
 router.post('/profile', [auth, authorize('doctor')], [
   body('specialization').notEmpty().withMessage('Specialization is required'),
   body('qualification').notEmpty().withMessage('Qualification is required'),
@@ -20,7 +20,6 @@ router.post('/profile', [auth, authorize('doctor')], [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    // Check if doctor profile already exists
     const existingDoctor = await Doctor.findOne({ user: req.user._id });
     if (existingDoctor) {
       return res.status(400).json({ message: 'Doctor profile already exists' });
@@ -64,6 +63,7 @@ router.post('/profile', [auth, authorize('doctor')], [
   }
 });
 
+// ✅ Fetch all doctors (fixed pagination)
 router.get('/', async (req, res) => {
   try {
     const { specialization, page = 1, limit = 10, search } = req.query;
@@ -75,11 +75,8 @@ router.get('/', async (req, res) => {
 
     let doctors = await Doctor.find(query)
       .populate('user', 'name email phone')
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
-      .sort({ rating: -1 });
+      .sort({ rating: -1 }); //  removed limit & skip
 
-    // Filter by search term if provided
     if (search) {
       doctors = doctors.filter(doctor => 
         doctor.user.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -101,7 +98,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-
+// Get single doctor
 router.get('/:id', async (req, res) => {
   try {
     const doctor = await Doctor.findById(req.params.id)
@@ -118,7 +115,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-
+// Update doctor profile
 router.put('/profile', [auth, authorize('doctor')], async (req, res) => {
   try {
     const doctor = await Doctor.findOne({ user: req.user._id });
@@ -136,7 +133,6 @@ router.put('/profile', [auth, authorize('doctor')], async (req, res) => {
       bio
     } = req.body;
 
-    // Update fields
     if (specialization) doctor.specialization = specialization;
     if (qualification) doctor.qualification = qualification;
     if (experience) doctor.experience = experience;
@@ -157,6 +153,7 @@ router.put('/profile', [auth, authorize('doctor')], async (req, res) => {
   }
 });
 
+// Update availability
 router.put('/availability', [auth, authorize('doctor')], async (req, res) => {
   try {
     const { availability } = req.body;
@@ -179,7 +176,7 @@ router.put('/availability', [auth, authorize('doctor')], async (req, res) => {
   }
 });
 
-
+// Get all unique specializations
 router.get('/meta/specializations', async (req, res) => {
   try {
     const specializations = await Doctor.distinct('specialization');
