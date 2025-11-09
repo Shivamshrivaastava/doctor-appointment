@@ -2,11 +2,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { appointmentAPI, doctorAPI } from '../services/api';
+import { appointmentAPI } from '../services/api';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, Clock, User, MapPin, Phone, LogOut, Plus } from 'lucide-react';
+import { Calendar, Clock, User, Phone, LogOut, Plus } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import BookAppointmentModal from './BookAppointmentModal';
 
@@ -100,7 +100,7 @@ const PatientDashboard: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Quick Actions */}
         <div className="mb-8">
-          <Button 
+          <Button
             onClick={() => setShowBookingModal(true)}
             size="lg"
             className="shadow-medical"
@@ -141,8 +141,17 @@ const PatientDashboard: React.FC = () => {
                             {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
                           </Badge>
                         </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+
+                        {/* 🔥 NEW — Message if Doctor closed future appointments */}
+                        {appointment.status === 'cancelled' &&
+                          appointment.cancellationReason?.toLowerCase().includes('doctor closed future appointment') && (
+                            <p className="text-sm text-red-600 mt-2 font-medium">
+                              Doctor closed this appointment. Please contact the doctor or book a new one.
+                            </p>
+                          )}
+
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm mt-3">
                           <div className="flex items-center text-muted-foreground">
                             <User className="h-4 w-4 mr-2" />
                             {appointment.doctor?.specialization}
@@ -160,7 +169,7 @@ const PatientDashboard: React.FC = () => {
                             {appointment.doctor?.user?.phone}
                           </div>
                         </div>
-                        
+
                         <div className="mt-3">
                           <p className="text-sm">
                             <strong>Reason:</strong> {appointment.reason}
@@ -186,7 +195,7 @@ const PatientDashboard: React.FC = () => {
                           </div>
                         )}
                       </div>
-                      
+
                       <div className="ml-6">
                         {(appointment.status === 'pending' || appointment.status === 'confirmed') && (
                           <Button
