@@ -4,7 +4,13 @@ import { appointmentAPI } from '../services/api';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 
 interface CompleteAppointmentModalProps {
@@ -12,6 +18,7 @@ interface CompleteAppointmentModalProps {
   onClose: () => void;
   appointment: any;
   onSuccess: () => void;
+  actionType?: 'confirm' | 'complete'; // ✅ NEW PROP
 }
 
 const CompleteAppointmentModal: React.FC<CompleteAppointmentModalProps> = ({
@@ -19,6 +26,7 @@ const CompleteAppointmentModal: React.FC<CompleteAppointmentModalProps> = ({
   onClose,
   appointment,
   onSuccess,
+  actionType = 'complete', // default
 }) => {
   const [notes, setNotes] = useState('');
   const [prescription, setPrescription] = useState('');
@@ -31,24 +39,40 @@ const CompleteAppointmentModal: React.FC<CompleteAppointmentModalProps> = ({
     setLoading(true);
 
     try {
-      await appointmentAPI.complete(appointment._id, {
-        notes,
-        prescription,
-        diagnosis,
-      });
+      if (actionType === 'confirm') {
+        // ✅ Confirm appointment with notes and prescription
+        await appointmentAPI.updateStatus(appointment._id, 'confirmed');
+        await appointmentAPI.complete(appointment._id, {
+          notes,
+          prescription,
+          diagnosis,
+        });
 
-      toast({
-        title: "Success",
-        description: "Appointment completed successfully!",
-      });
-      
+        toast({
+          title: 'Confirmed',
+          description: 'Appointment confirmed successfully!',
+        });
+      } else {
+        // ✅ Complete appointment
+        await appointmentAPI.complete(appointment._id, {
+          notes,
+          prescription,
+          diagnosis,
+        });
+
+        toast({
+          title: 'Completed',
+          description: 'Appointment completed successfully!',
+        });
+      }
+
       onSuccess();
       onClose();
     } catch (error: any) {
       toast({
-        title: "Error",
+        title: 'Error',
         description: error.message,
-        variant: "destructive",
+        variant: 'destructive',
       });
     } finally {
       setLoading(false);
@@ -59,12 +83,16 @@ const CompleteAppointmentModal: React.FC<CompleteAppointmentModalProps> = ({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Complete Appointment</DialogTitle>
+          <DialogTitle>
+            {actionType === 'confirm' ? 'Confirm Appointment' : 'Complete Appointment'}
+          </DialogTitle>
           <DialogDescription>
-            Add notes, diagnosis, and prescription for {appointment?.patient?.name}
+            {actionType === 'confirm'
+              ? `Add notes, diagnosis, and prescription before confirming for ${appointment?.patient?.name}`
+              : `Add notes, diagnosis, and prescription for ${appointment?.patient?.name}`}
           </DialogDescription>
         </DialogHeader>
-        
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="diagnosis">Diagnosis</Label>
@@ -100,11 +128,22 @@ const CompleteAppointmentModal: React.FC<CompleteAppointmentModalProps> = ({
           </div>
 
           <div className="flex gap-3 pt-4">
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              className="flex-1"
+            >
               Cancel
             </Button>
             <Button type="submit" disabled={loading} className="flex-1">
-              {loading ? 'Completing...' : 'Complete Appointment'}
+              {loading
+                ? actionType === 'confirm'
+                  ? 'Confirming...'
+                  : 'Completing...'
+                : actionType === 'confirm'
+                ? 'Confirm Appointment'
+                : 'Complete Appointment'}
             </Button>
           </div>
         </form>
