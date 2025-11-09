@@ -7,6 +7,10 @@ const User = require('../models/User');
 const { auth, authorize } = require('../middleware/auth');
 
 const router = express.Router();
+
+// ==========================
+// Create Appointment (Patient)
+// ==========================
 router.post('/', [auth, authorize('patient')], [
   body('doctor').notEmpty().withMessage('Doctor ID is required'),
   body('appointmentDate').isISO8601().withMessage('Valid appointment date is required'),
@@ -80,12 +84,14 @@ router.post('/', [auth, authorize('patient')], [
   }
 });
 
+// ==========================
+// Get Appointments (All Roles)
+// ==========================
 router.get('/', auth, async (req, res) => {
   try {
     const { page = 1, limit = 10, status, date } = req.query;
-    
     let query = {};
-    
+
     // Filter based on user role
     if (req.user.role === 'patient') {
       query.patient = req.user._id;
@@ -96,11 +102,8 @@ router.get('/', auth, async (req, res) => {
       }
       query.doctor = doctorInfo._id;
     }
-    // Admin can see all appointments (no additional filter)
 
-    if (status) {
-      query.status = status;
-    }
+    if (status) query.status = status;
 
     if (date) {
       const startDate = moment(date).startOf('day');
@@ -139,6 +142,9 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
+// ==========================
+// Get Appointment by ID
+// ==========================
 router.get('/:id', auth, async (req, res) => {
   try {
     const appointment = await Appointment.findById(req.params.id)
@@ -156,7 +162,6 @@ router.get('/:id', auth, async (req, res) => {
       return res.status(404).json({ message: 'Appointment not found' });
     }
 
-    // Check if user has access to this appointment
     const isPatient = appointment.patient._id.toString() === req.user._id.toString();
     const isDoctor = appointment.doctor.user._id.toString() === req.user._id.toString();
     const isAdmin = req.user.role === 'admin';
@@ -172,21 +177,20 @@ router.get('/:id', auth, async (req, res) => {
   }
 });
 
-
+// ==========================
+// Update Appointment Status
+// ==========================
 router.put('/:id/status', [auth, authorize('doctor', 'admin')], async (req, res) => {
   try {
     const { status } = req.body;
-    
+
     if (!['pending', 'confirmed', 'completed', 'cancelled', 'no-show'].includes(status)) {
       return res.status(400).json({ message: 'Invalid status' });
     }
 
     const appointment = await Appointment.findById(req.params.id);
-    if (!appointment) {
-      return res.status(404).json({ message: 'Appointment not found' });
-    }
+    if (!appointment) return res.status(404).json({ message: 'Appointment not found' });
 
-    // If user is a doctor, check if they own this appointment
     if (req.user.role === 'doctor') {
       const doctorInfo = await Doctor.findOne({ user: req.user._id });
       if (appointment.doctor.toString() !== doctorInfo._id.toString()) {
@@ -197,45 +201,37 @@ router.put('/:id/status', [auth, authorize('doctor', 'admin')], async (req, res)
     appointment.status = status;
     await appointment.save();
 
-    res.json({
-      message: 'Appointment status updated successfully',
-      appointment
-    });
+    res.json({ message: 'Appointment status updated successfully', appointment });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
   }
 });
 
-
+// ==========================
+// Cancel Appointment (Patient/Doctor/Admin)
+// ==========================
 router.put('/:id/cancel', auth, async (req, res) => {
   try {
     const { reason } = req.body;
-    
-    const appointment = await Appointment.findById(req.params.id);
-    if (!appointment) {
-      return res.status(404).json({ message: 'Appointment not found' });
-    }
 
-    // Check if user has permission to cancel
+    const appointment = await Appointment.findById(req.params.id);
+    if (!appointment) return res.status(404).json({ message: 'Appointment not found' });
+
     const isPatient = appointment.patient.toString() === req.user._id.toString();
     let isDoctor = false;
-    
+
     if (req.user.role === 'doctor') {
       const doctorInfo = await Doctor.findOne({ user: req.user._id });
       isDoctor = appointment.doctor.toString() === doctorInfo._id.toString();
     }
-    
+
     const isAdmin = req.user.role === 'admin';
-
-    if (!isPatient && !isDoctor && !isAdmin) {
+    if (!isPatient && !isDoctor && !isAdmin)
       return res.status(403).json({ message: 'Access denied' });
-    }
 
-    // Check if appointment can be cancelled
-    if (['completed', 'cancelled'].includes(appointment.status)) {
+    if (['completed', 'cancelled'].includes(appointment.status))
       return res.status(400).json({ message: 'Cannot cancel this appointment' });
-    }
 
     appointment.status = 'cancelled';
     appointment.cancelledBy = req.user.role;
@@ -243,9 +239,44 @@ router.put('/:id/cancel', auth, async (req, res) => {
 
     await appointment.save();
 
+    res.json({ message: 'Appointment cancelled successfully', appointment });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ==========================
+// NEW FEATURE: Close Future Appointments (Doctor)
+// ==========================
+router.put('/close-future', [auth, authorize('doctor')], async (req, res) => {
+  try {
+    const { fromDate } = req.body;
+    const doctorInfo = await Doctor.findOne({ user: req.user._id });
+    if (!doctorInfo) {
+      return res.status(404).json({ message: 'Doctor profile not found' });
+    }
+
+    const now = fromDate ? new Date(fromDate) : new Date();
+
+    const result = await Appointment.updateMany(
+      {
+        doctor: doctorInfo._id,
+        appointmentDate: { $gte: now },
+        status: { $in: ['pending', 'confirmed'] }
+      },
+      {
+        $set: {
+          status: 'cancelled',
+          cancelledBy: 'doctor',
+          cancellationReason: 'Doctor closed future appointments'
+        }
+      }
+    );
+
     res.json({
-      message: 'Appointment cancelled successfully',
-      appointment
+      message: `${result.modifiedCount} future appointments closed successfully.`,
+      closedCount: result.modifiedCount
     });
   } catch (error) {
     console.error(error);
@@ -253,26 +284,22 @@ router.put('/:id/cancel', auth, async (req, res) => {
   }
 });
 
-
+// ==========================
+// Complete Appointment
+// ==========================
 router.put('/:id/complete', [auth, authorize('doctor')], async (req, res) => {
   try {
     const { notes, prescription, diagnosis } = req.body;
-    
+
     const appointment = await Appointment.findById(req.params.id);
-    if (!appointment) {
-      return res.status(404).json({ message: 'Appointment not found' });
-    }
+    if (!appointment) return res.status(404).json({ message: 'Appointment not found' });
 
-    // Check if doctor owns this appointment
     const doctorInfo = await Doctor.findOne({ user: req.user._id });
-    if (appointment.doctor.toString() !== doctorInfo._id.toString()) {
+    if (appointment.doctor.toString() !== doctorInfo._id.toString())
       return res.status(403).json({ message: 'Access denied' });
-    }
 
-    // Check if appointment is confirmed
-    if (appointment.status !== 'confirmed') {
+    if (appointment.status !== 'confirmed')
       return res.status(400).json({ message: 'Only confirmed appointments can be completed' });
-    }
 
     appointment.status = 'completed';
     appointment.notes = notes;
@@ -281,50 +308,39 @@ router.put('/:id/complete', [auth, authorize('doctor')], async (req, res) => {
 
     await appointment.save();
 
-    res.json({
-      message: 'Appointment completed successfully',
-      appointment
-    });
+    res.json({ message: 'Appointment completed successfully', appointment });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
   }
 });
 
-
+// ==========================
+// Doctor Availability (Get Slots)
+// ==========================
 router.get('/doctor/:doctorId/availability', async (req, res) => {
   try {
     const { date } = req.query;
-    
-    if (!date) {
-      return res.status(400).json({ message: 'Date is required' });
-    }
+    if (!date) return res.status(400).json({ message: 'Date is required' });
 
     const doctor = await Doctor.findById(req.params.doctorId);
-    if (!doctor) {
-      return res.status(404).json({ message: 'Doctor not found' });
-    }
+    if (!doctor) return res.status(404).json({ message: 'Doctor not found' });
 
-    // Get the day of the week
     const dayOfWeek = moment(date).format('dddd').toLowerCase();
-    
-    // Find doctor's availability for this day
     const dayAvailability = doctor.availability.find(av => av.day === dayOfWeek);
     if (!dayAvailability || !dayAvailability.isAvailable) {
       return res.json({ availableSlots: [] });
     }
 
-    // Generate time slots
     const startTime = moment(`${date} ${dayAvailability.startTime}`);
     const endTime = moment(`${date} ${dayAvailability.endTime}`);
     const slots = [];
 
     while (startTime.isBefore(endTime)) {
       slots.push(startTime.format('HH:mm'));
-      startTime.add(30, 'minutes'); // 30-minute slots
+      startTime.add(30, 'minutes');
     }
 
-    // Get booked appointments for this date
     const bookedAppointments = await Appointment.find({
       doctor: req.params.doctorId,
       appointmentDate: new Date(date),
